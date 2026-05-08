@@ -1,8 +1,8 @@
-# Skills + MCPs for Backend Builder
+# Skills + tools for Backend Builder
 
 ## Skills (Multica → `agent_skill` table)
 
-Every skill below is imported into Multica via `multica skill import --url <skills.sh URL>`. The "Already installed locally" / "Needs installation" distinction doesn't apply to Multica — every agent task spawns in a fresh `work_dir`, so the daemon must inject every attached skill regardless of what's on the operator's laptop.
+Every skill below is imported into Multica via `multica skill import --url <skills.sh URL>`. Every agent task spawns in a fresh `work_dir`, so the daemon must inject every attached skill regardless of what's on the operator's laptop.
 
 ### To attach (import from skills.sh)
 
@@ -22,7 +22,6 @@ Every skill below is imported into Multica via `multica skill import --url <skil
 | `webapp-testing` | Anthropic-flavored Playwright skill, complements `playwright-best-practices`. | [skills.sh/anthropics/skills/webapp-testing](https://skills.sh/anthropics/skills/webapp-testing) | [github.com/anthropics/skills/tree/main/webapp-testing](https://github.com/anthropics/skills/tree/main/webapp-testing) |
 | `stripe-best-practices` | Checkout vs PaymentIntents, restricted keys, webhook security, idempotency. Triggers: "stripe", "checkout", "subscription", "webhook", "billing". | [skills.sh/stripe/ai/stripe-best-practices](https://skills.sh/stripe/ai/stripe-best-practices) | [github.com/stripe/ai](https://github.com/stripe/ai) |
 | `better-auth-best-practices` | Install **only if** the workspace uses Better Auth. Covers `BETTER_AUTH_SECRET`, DB adapters, session config, plugin selection. | [skills.sh/better-auth/skills/better-auth-best-practices](https://skills.sh/better-auth/skills/better-auth-best-practices) | [github.com/better-auth/skills](https://github.com/better-auth/skills) |
-| `mcp-builder` | Install when Backend Builder needs to wrap a new internal API as an MCP for other agents. Not day one. | [skills.sh/anthropics/skills/mcp-builder](https://skills.sh/anthropics/skills/mcp-builder) | [github.com/anthropics/skills/tree/main/mcp-builder](https://github.com/anthropics/skills/tree/main/mcp-builder) |
 
 ### To author via `skill-creator`
 
@@ -30,44 +29,49 @@ Every skill below is imported into Multica via `multica skill import --url <skil
 |---|---|
 | `workspace-migration-rules` | Encodes *this workspace's* migration tool, naming convention (`<utc>_<verb>_<thing>.sql`), forbidden patterns (`DROP TABLE` without an explicit issue), and rollback expectations. |
 
-**Skills bundled with Claude Code** (no marketplace import; auto-load when runtime is `claude-code`): `simplify`, `review`, `security-review`, `init`. Use them on every PR self-review pass; `security-review` is mandatory on any auth/payments/RLS/webhook touch.
+**Skills bundled with Claude Code** (auto-load when runtime is `claude-code`): `simplify`, `review`, `security-review`, `init`. Use them on every PR self-review pass; `security-review` is mandatory on any auth/payments/RLS/webhook touch.
 
 > Do not pre-attach the Anthropic creative suite, the Vercel design skills, or any frontend skill — Backend Builder must not be tempted into UI work.
 
-## MCP servers (`agent.mcp_config`)
+## Tools & API access
 
-| MCP | Scope | Why |
-|---|---|---|
-| **github** (`ghcr.io/github/github-mcp-server`) | open PRs · comment on PRs · read code/issues. **No merge, no admin, no force-push.** | Primary deliverable surface. The npm `@modelcontextprotocol/server-github` package is unsupported as of April 2025 — use the official Docker image. ([source](https://github.com/github/github-mcp-server)) |
-| **supabase** (`@supabase/mcp-server-supabase@latest`) | **`--read-only` always** + `--project-ref=<ref>` scoped to the workspace project. Schema writes happen only via migration files in the PR. | Read-only Postgres user prevents accidental data mutation; auditability + rollback live in git, not MCP call history. ([source](https://github.com/supabase-community/supabase-mcp)) |
-| **sentry** (`@sentry/mcp-server`) | read-only — issues, events, stack traces. No release-create, no project-create. | Debugging real production errors when the issue says "users report 500 on /api/checkout". |
-| **stripe** (`@stripe/mcp` via `npx`) | **test-mode key only**. Read products/prices/customers, simulate webhooks. **Never** attach a live key. | Verify integration shapes without a browser round-trip. |
-| **context7** | read-only library docs | Authoritative version-current docs for Next.js, Drizzle, Better Auth, Stripe SDK — beats web search. |
-| **filesystem** | scoped to the task `work_dir` only (`~/multica_workspaces/<task-id>/`) | Standard. Never broaden to `$HOME` or repo root outside the task. |
+**Hard rule for this agent**: writes flow through `git` + `gh pr create`, never through direct API mutations. Schema changes flow through migration files in the PR, not through ad-hoc SQL.
 
-### How to wire this in Multica
+| Service | How the agent uses it | Required env vars | Scope |
+|---|---|---|---|
+| **GitHub** | `gh` CLI for branches, commits, `gh pr create`, `gh issue comment`. The agent never `gh pr merge`s. | `GH_TOKEN=$GITHUB_PAT_BACKEND_BUILDER` (`contents:write`, `pull_requests:write` without merge, `issues:read`) | **No merge, no admin, no force-push.** Branch protection on `main` is the last line of defense. |
+| **Supabase** | `supabase` CLI for `db diff`, `db lint`, `db push --dry-run`, generating migration files. Read queries via `psql` against the read-only role. | `SUPABASE_ACCESS_TOKEN=$SUPABASE_ACCESS_TOKEN_RO` (read-only project token) · `SUPABASE_PROJECT_REF=xxxx` · `SUPABASE_DB_URL_RO=postgresql://readonly:...` | **Read-only direct DB access.** Schema mutations only via committed migration files; CI applies them. |
+| **Sentry** | Sentry REST API: `curl https://sentry.io/api/0/organizations/<org>/issues/?query=is:unresolved`. | `SENTRY_AUTH_TOKEN=$SENTRY_READ_TOKEN` (org-level read scope) | Read-only — issues, events, stack traces. |
+| **Stripe** | `stripe` CLI for `stripe listen` (webhook fixtures), `stripe products list`, `stripe trigger`. SDK calls in code go through the test-mode key only at dev time. | `STRIPE_SECRET_KEY=$STRIPE_TEST_SECRET_KEY` (test-mode `sk_test_…` only — **never live**) | Test-mode only. |
+| **Anthropic / Vercel AI SDK** | If the product calls models server-side, the agent edits code that uses these SDKs; runtime API key resolution stays in app config. | `ANTHROPIC_API_KEY` (only if needed for local agent runs of the product code) | Whatever the product needs; the agent doesn't hold prod keys. |
+| **Filesystem** | The agent reads/writes inside the per-task `work_dir` (`~/multica_workspaces/<task-id>/`). | `MULTICA_TASK_WORKDIR` (set by the daemon) | Task-scoped only. |
+| **Library docs** | When the model needs current Next.js / Drizzle / Better Auth / Stripe SDK docs, it uses Claude Code's WebFetch tool against the official docs site. | none | n/a |
 
-The cleaned, spec-valid config lives at `agents/backend-builder/mcp.json`. Multica's agent-settings GUI does not expose an MCP page today — [PR #1221](https://github.com/multica-ai/multica/pull/1221) is open. The daemon reads `agent.mcp_config` from the DB and passes it to Claude Code via `--mcp-config <tempfile>` (PR #1168, shipped v0.2.6). Full procedure in `agents/MCP-WIRING.md` Part A.
+### Wiring in Multica
 
-In the Multica GUI (Settings → Agents → Backend Builder):
+In the Multica GUI (Settings → Agents → Backend Builder), set:
+
 - **Custom arguments**: leave empty, or use for non-MCP tuning (e.g. `--permission-mode acceptEdits`).
-- **Environment** (one `KEY=VALUE` per line — referenced as `${VAR}` in `mcp.json`):
+- **Environment** (one `KEY=VALUE` per line):
   ```
-  GITHUB_PAT_BACKEND_BUILDER=ghp_...
-  SUPABASE_ACCESS_TOKEN_RO=sbp_...
+  GH_TOKEN=ghp_...
+  SUPABASE_ACCESS_TOKEN=sbp_...
   SUPABASE_PROJECT_REF=xxxx
-  SENTRY_READ_TOKEN=snry_...
+  SUPABASE_DB_URL_RO=postgresql://readonly:...
+  SENTRY_AUTH_TOKEN=snry_...
+  STRIPE_SECRET_KEY=sk_test_...
   ANTHROPIC_API_KEY=sk-ant-...
-  STRIPE_TEST_SECRET_KEY=sk_test_...
   MULTICA_TASK_WORKDIR=/home/<user>/multica_workspaces/<task-id>
   ```
 
+The daemon spawns the agent CLI with these env vars set; the agent invokes `gh`, `supabase`, `stripe`, `psql`, `curl` from Bash. No MCP server config to maintain.
+
 Rationale notes:
-- **github** PAT toolsets exclude `actions`, `secrets`, `admin`. No `merge_pull_request`. Defense in depth: even if the agent tries to call those tools, the token can't authorize them.
-- **supabase** `--read-only` only governs DB tools (`execute_sql`, `apply_migration`); project/branch-mutating tools remain callable per [Supabase #112](https://github.com/supabase-community/supabase-mcp/issues/112), so the access token is also narrow-scoped.
-- **stripe** uses test-mode key only.
-- **filesystem** is scoped to `${MULTICA_TASK_WORKDIR}`. Never broaden to `$HOME`.
+- **GitHub** PAT excludes `actions`, `secrets`, `admin`. No `merge_pull_request`. Defense in depth — even if the agent tries, the token can't authorize it.
+- **Supabase** read-only role + read-only project token means accidental data mutations are impossible at the credential layer; auditability + rollback live in git.
+- **Stripe** test-mode key only. A live key in this env field is a P0 incident.
+- **Filesystem** is scoped to `${MULTICA_TASK_WORKDIR}`. Never broaden to `$HOME`.
 
 ## Coherence check
 
-The skill set is server-only (Supabase, Vercel Functions, Stripe, Better Auth, testing) — no frontend skill is attached, which keeps the role honest. The MCP set is biased read: GitHub can only open PRs (not merge), Supabase is read-only with schema changes flowing through migration files, Sentry and Stripe are read-only / test-mode. The single write path to production data is `human reviews PR → human merges → CI runs migration` — exactly the auditability + rollback story migrations exist for.
+The skill set is server-only (Supabase, Vercel Functions, Stripe, Better Auth, testing) — no frontend skill is attached, which keeps the role honest. The API set is biased read: GitHub can only open PRs (not merge), Supabase is read-only with schema changes flowing through migration files, Sentry and Stripe are read-only / test-mode. The single write path to production data is `human reviews PR → human merges → CI runs migration` — exactly the auditability + rollback story migrations exist for.

@@ -88,7 +88,7 @@ From `docs/product-overview.md` §2 + §3. Every concept maps cleanly to a DB ta
 | **User** | `user` | A human account. Spans many workspaces. |
 | **Workspace** | `workspace` | The multi-tenant boundary. Issues, agents, skills, members, projects all live inside exactly one. URL is always `/{slug}/...`. Carries a system-prompt-for-all-agents in `workspace.context`. |
 | **Member** | `member` | A user's role in a specific workspace (`owner` / `admin` / `member`). Different users can have different roles in different workspaces. |
-| **Agent** | `agent` | A configured AI worker. Has profile (name, avatar), runtime, provider, custom system prompt, attached skills, and `mcp_config` (JSONB) — **each agent carries its own MCP server list**. |
+| **Agent** | `agent` | A configured AI worker. Has profile (name, avatar), runtime, provider, custom system prompt, attached skills, and an Environment block (env vars injected when the daemon spawns the agent CLI). The schema also has an optional `mcp_config` (JSONB) column, but the GUI tab to edit it is still in flight (PR #1221) — this Tier-1 roster uses direct API calls via env-var-supplied credentials instead. |
 | **Runtime** | `agent_runtime` | The execution environment — one runtime = one machine that can run agents. Local daemon registers a runtime per detected CLI per watched workspace. |
 | **Daemon** | (process, not a table) | The local Go binary that polls the server, claims tasks, runs the agent CLI, streams results back. |
 | **Issue** | `issue` | The unit of work. Identifier like `ACME-42` (workspace prefix + serial). Assigned to either a member or an agent. |
@@ -111,7 +111,7 @@ From `docs/product-overview.md` §2 + §3. Every concept maps cleanly to a DB ta
 
 - **Session resumption** — for the same `(agent, issue)` pair, the next task reuses the previous Claude Code `session_id` and `work_dir`. The agent resumes with full chat history, file state, and `.git` from last time. This is the difference between an agent that forgets every assignment and one that builds on prior work.
 - **Workspace Context** (`workspace.context`) — workspace-wide system prompt prepended to every agent. Where you put "we use TypeScript, we deploy via Vercel, our coding rules live in CLAUDE.md".
-- **MCP per agent** — each agent has `agent.mcp_config`. So one agent can have GitHub + Linear MCP, another can have Stripe + Sentry. Not a workspace-wide setting.
+- **Per-agent credentials** — each agent has its own Environment block (env vars set when the daemon spawns the CLI). One agent can carry a read-only Supabase token + a write-scoped GitHub PAT; another can carry test-mode Stripe keys. Not a workspace-wide setting. The schema also exposes an `agent.mcp_config` JSONB column for native MCP injection (Claude Code: `--mcp-config`; Codex: `$CODEX_HOME/config.toml` — both behind in-flight PRs as of May 2026), kept available for rosters that prefer MCP over CLI/REST.
 
 ## 6. Task lifecycle
 
@@ -127,7 +127,7 @@ agent_task_queue row inserted (status=pending)
 status=claimed
     │
     │ daemon prepares ~/multica_workspaces/<task-id>/ — clones repo, writes skills,
-    │ injects workspace.context + agent prompt + MCP config
+    │ injects workspace.context + agent prompt + Environment vars (and mcp_config if set)
     ▼
 status=running                    ◄── 15s heartbeats keep this alive
     │
@@ -347,7 +347,7 @@ Rough quickstart for someone with an empty `multica` repo and a vibe-coding habi
 1. **Self-host the server** — `make selfhost` (Docker Compose) or use Multica Cloud.
 2. **Install the CLI + an agent** — `brew install multica-ai/tap/multica` and at least one of `claude`, `codex`, `cursor-agent` on your PATH.
 3. **`multica setup`** — handles auth, workspace discovery, daemon start.
-4. **Create one agent per role**, not per project. Examples: `Builder` (Claude Code, with skills like `frontend-design`, `web-artifacts-builder`), `Reviewer` (Codex or another Claude Code agent with `webapp-testing` + `react-best-practices`), `Ops` (Claude Code with `vercel:deploy` + `vercel:env-vars`). Each agent has its own MCP config and its own attached skills.
+4. **Create one agent per role**, not per project. Examples: `Builder` (Claude Code, with skills like `frontend-design`, `web-artifacts-builder`), `Reviewer` (Codex or another Claude Code agent with `webapp-testing` + `react-best-practices`), `Ops` (Claude Code with `vercel:deploy` + `vercel:env-vars`). Each agent has its own Environment block (API credentials) and its own attached skills. See `agent-roster.md` for a worked example with 6 Tier-1 roles.
 5. **Workspace Context** — write your house style there: stack, conventions, branch rules, "do this / don't do that". Every agent in the workspace inherits it.
 6. **Build a backlog** — file issues, assign to the agent that fits the role. Comment to iterate. `@`-mention to switch agents mid-thread.
 7. **Add Autopilots once a pattern repeats** — daily PR review, weekly dep audit, every-Monday backlog grooming.

@@ -62,7 +62,7 @@ Author and iterate on other skills with an evaluation loop. Knows how to intervi
 Build high-quality MCP (Model Context Protocol) servers in Python (FastMCP) or Node/TypeScript (MCP SDK). Walks through API coverage decisions, naming conventions, error-message design, and tool description clarity. Practical guide to the protocol.
 
 - **Triggers**: "build an MCP server", "expose `<service>` to Claude", "wrap `<API>` for agents".
-- **Why install**: every time you want to give an agent a new capability, the answer is increasingly an MCP server. This is how to build one well.
+- **Why install**: when you decide an agent needs structured tool access (typed inputs/outputs, JSON schemas, multi-step protocols) rather than ad-hoc CLI/curl scripts, an MCP server is the right form factor. This skill is the canonical guide. Optional for Tier-1 rosters that drive everything from Bash + REST.
 
 ### `anthropics/webapp-testing`
 **Source**: `anthropics/skills/webapp-testing` · **License**: Apache-2.0

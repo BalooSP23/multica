@@ -1,4 +1,4 @@
-# Skills + MCPs for Reviewer
+# Skills + tools for Reviewer
 
 ## Skills (Multica → `agent_skill` table)
 
@@ -35,52 +35,52 @@ Reviewer runs on Codex CLI, but Multica still imports skills via `multica skill 
 | `workspace-conventions-check` | Reads `workspace.context` and emits a checklist the Reviewer applies to each PR. Without this, conventions enforcement drifts. |
 | `regression-risk` | Heuristics for "what could this PR break elsewhere?" — touches pages with high prod traffic, modifies a function with N call-sites, changes a public API. Pair with the Sentry skill. |
 
-**CodeRabbit MCP (not a skill)**: `bradthebeeble/coderabbitai-mcp` is an MCP, not a `SKILL.md` package. Wire it as an MCP if CodeRabbit is also on the repo (see MCP table below); the agent reads CodeRabbit's review as a second-opinion checker.
+## Tools & API access
 
-## MCP servers (`agent.mcp_config`)
+**Hard rule for this agent**: comments only, never commits. The agent reaches every external system through a CLI or HTTP API invoked from Bash, with read-only credentials wherever possible.
 
-| MCP | Scope | Why |
-|---|---|---|
-| `github` | **READ-ONLY** for code (`contents:read`, `metadata:read`, `pull_requests:read`); **WRITE only for review comments** (`pull_requests:write`). **Explicitly NO** `repo` write, no `contents:write`, no `merge`, no `workflows`. | Read PR diff, post line-level comments, post review verdict. Cannot push, cannot merge. |
-| `sentry` | read-only — projects scoped to the current workspace | Recent errors in touched paths/files. |
-| `filesystem` | **READ-ONLY** scoped to the task `work_dir` only | Read the cloned repo for context (workspace conventions, sibling files, import graph). No writes. |
-| `context7` | read-only | Verify Builder's library usage against current docs. |
-| `multica` | scoped: file new issues, comment on issues, list workspace context — **no agent CRUD**, no skill CRUD | When Reviewer spots an architectural concern out-of-scope for the PR, it files a separate issue rather than bloating the PR thread. |
-| *(optional)* `coderabbitai` | read-only against the same PR | If CodeRabbit is also wired to the repo, Reviewer can read its review and reconcile findings — diversity of evaluators. |
+| Service | How the agent uses it | Required env vars | Scope |
+|---|---|---|---|
+| **GitHub** | `gh` CLI for `gh pr view`, `gh pr diff`, `gh pr comment`, `gh pr review --comment`. **Explicitly never** `gh pr merge`, `gh push`. | `GH_TOKEN=$GITHUB_PAT_REVIEWER` (`pull_requests:write` for review comments only · `contents:read` · `metadata:read`. **Not granted**: `contents:write`, `administration`, `workflows`, `actions:write`.) | Comment-only on PRs. |
+| **Sentry** | Sentry REST API: `curl https://sentry.io/api/0/organizations/<org>/issues/?query=is:unresolved+file:<path>`. | `SENTRY_AUTH_TOKEN=$SENTRY_REVIEWER_TOKEN` (read-only org scope) | Read-only. |
+| **Filesystem** | Per-task `work_dir` only. **READ-ONLY** — no writes from this agent. | `MULTICA_TASK_WORKDIR` (set by daemon) | Read-only, task-scoped. |
+| **Library docs** | When verifying Builder's library usage, the model uses Codex's web-fetch capability against the official docs. | none | n/a |
+| **Multica** | `multica issue create`, `multica issue comment` for filing architectural concerns out-of-scope of the PR. **No** `multica agent` or `multica skill` writes. | `MULTICA_PAT=mul_…` (issue-scoped token if possible; otherwise PAT scoped to read+issue-write) · `MULTICA_BASE` | Issue I/O only. |
+| **CodeRabbit** *(optional)* | If CodeRabbit is also wired to the repo, fetch its PR review via `curl https://api.coderabbit.ai/v1/reviews/<pr-id>` for second-opinion reconciliation. | `CODERABBIT_API_KEY` (read-only) | Read-only. |
 
-### How to wire this in Multica (Codex CLI)
+### Wiring in Multica (Codex CLI)
 
-Reviewer is the only Codex-runtime agent in this roster. Wiring is **fundamentally different** from the Claude Code agents because:
+Reviewer is the only Codex-runtime agent in this roster. Wiring is straightforward without MCP:
 
-- Codex CLI has no `--mcp-config` flag. It reads MCP from `$CODEX_HOME/config.toml` using `[mcp_servers.NAME]` TOML tables.
-- Multica's daemon does not yet inject `agent.mcp_config` into Codex's `config.toml` — [PR #1288](https://github.com/multica-ai/multica/pull/1288) is open as of April 2026 with reviewer pushback. Setting `mcp_config` on a Codex-runtime agent today is silently ignored.
+1. On the daemon host, set `MULTICA_CODEX_PATH=/usr/local/bin/codex` so the daemon resolves the binary.
+2. Optionally set `MULTICA_CODEX_MODEL=gpt-5.1-codex` (or whatever current Codex model is shipping).
+3. In Multica → Settings → Agents → Reviewer:
+   - **Runtime**: `codex`
+   - **Custom arguments**: `--sandbox read-only --model gpt-5.1-codex` (Codex respects `--sandbox`; `--model` pins the underlying model).
+   - **Environment** (one `KEY=VALUE` per line):
+     ```
+     GH_TOKEN=ghp_...
+     SENTRY_AUTH_TOKEN=snry_...
+     MULTICA_PAT=mul_...
+     MULTICA_BASE=http://localhost:8080
+     CODERABBIT_API_KEY=cra-...
+     ```
 
-The canonical TOML config lives at `agents/reviewer/mcp.toml` (sibling file, **not** `mcp.json` — Codex is TOML-only). Wire it up via one of:
-
-1. **Pre-populate the daemon host's `~/.codex/config.toml`** (simplest while only one Codex agent exists). Copy `mcp.toml` to that path on the daemon machine, **inline real secrets** (Codex does not expand `${VAR}`), and `chmod 600`.
-2. **Per-agent `CODEX_HOME` via wrapper script** (when adding a second Codex agent):
-   - Wrapper: `export CODEX_HOME="$HOME/.multica/codex-homes/reviewer"; exec /usr/local/bin/codex "$@"`
-   - Daemon env: `MULTICA_CODEX_PATH=/usr/local/bin/codex-reviewer`
-   - Place `mcp.toml` at `~/.multica/codex-homes/reviewer/config.toml`.
-3. **Multica GUI** (Settings → Agents → Reviewer):
-   - **Custom arguments**: `--sandbox read-only --model gpt-5.1-codex`
-   - **Environment**: not used for MCP secrets (Codex won't expand them). Setting `CODEX_HOME` here per-agent is a clean alternative to option 2.
-
-Full procedure + workaround commentary in `agents/MCP-WIRING.md` Part B.
+The agent invokes `gh`, `curl`, `multica` from Bash. No MCP config files, no `~/.codex/config.toml` MCP injection, no daemon-side TOML wiring.
 
 **Token hygiene** (non-negotiable):
-- `GITHUB_PAT_REVIEWER` — fine-grained PAT distinct from the Builders'. Permissions: `Pull requests: read & write`, `Contents: read`, `Metadata: read`. **Not granted**: `Contents: write`, `Administration`, `Workflows`, `Actions: write`.
-- `SENTRY_REVIEWER_TOKEN` — read-only org scope.
-- Tokens are **inlined** in the daemon-host `config.toml` (TOML, no `${VAR}` expansion). Lock to mode 0600 and own by the daemon user.
+- `GITHUB_PAT_REVIEWER` is a fine-grained PAT distinct from the Builders'. Permissions: `Pull requests: read & write` (review comments only), `Contents: read`, `Metadata: read`. **Not granted**: `Contents: write`, `Administration`, `Workflows`, `Actions: write`.
+- `SENTRY_REVIEWER_TOKEN` is read-only org scope.
+- Rotation: quarterly, plus immediately on any agent-config breach.
 
 ## Coherence check
 
-The package — Codex/Gemini runtime + read-only filesystem MCP + GitHub PAT with no merge/push scope + adversarial system prompt + no autoformatting nits — is what *prevents rubber-stamping*. Drop any one piece and the loop degrades: same-model = blind spots align; write-scoped GitHub token = Reviewer can accidentally push; missing rubric skill = inconsistent scoring across PRs. The whole point is that the Reviewer is *structurally incapable* of rubber-stamping, not just instructed not to.
+The package — Codex/Gemini runtime + read-only filesystem + GitHub PAT with no merge/push scope + adversarial system prompt + no autoformatting nits — is what *prevents rubber-stamping*. Drop any one piece and the loop degrades: same-model = blind spots align; write-scoped GitHub token = Reviewer can accidentally push; missing rubric skill = inconsistent scoring across PRs. The whole point is that the Reviewer is *structurally incapable* of rubber-stamping, not just instructed not to.
 
 ### Sources
 - `agent-roster.md` §5.4 (Reviewer spec), §7 (anti-pattern: same-model rubber-stamp).
 - `agent-orchestration.md` §4.7 (5-axis evaluator rubric), §5 (anti-drift via model diversity).
 - `multica.md` §3 (11 supported runtimes), §10 (per-agent runtime override env vars).
 - Trail of Bits skills: https://github.com/trailofbits/skills
-- CodeRabbit MCP: https://github.com/bradthebeeble/coderabbitai-mcp
-- GitHub MCP: https://github.com/github/github-mcp-server
+- GitHub CLI: https://cli.github.com/manual/
+- Sentry API: https://docs.sentry.io/api/

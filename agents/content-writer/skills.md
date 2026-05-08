@@ -1,4 +1,4 @@
-# Skills + MCPs for Content Writer
+# Skills + tools for Content Writer
 
 ## Skills (Multica → `agent_skill` table)
 
@@ -26,7 +26,7 @@ The Content Writer's skill list is deliberately short. Don't pre-attach the Verc
 
 ### To author via `skill-creator` (highest priority)
 
-The most-leveraged authoring item by far is `brand-voice-<workspace>`. **It is the difference between a "ChatGPT landing page" and a page that sounds like a human wrote it.** Generic advice ("be conversational", "use active voice") gets you to AI-default output. A workspace voice skill — with banned phrases, real-example paragraphs from your existing writing, and a "good vs slop" comparison set — is the only reliable way to push past that ceiling. Author it once per product; attach to this agent only.
+The most-leveraged authoring item by far is `brand-voice-<workspace>`. **It is the difference between a "ChatGPT landing page" and a page that sounds like a human wrote it.**
 
 | Skill | Purpose |
 |---|---|
@@ -35,44 +35,46 @@ The most-leveraged authoring item by far is `brand-voice-<workspace>`. **It is t
 | `article-checklist` | Pre-handoff checklist run as the last step before "draft ready for review": every claim has a source link? skim-test passes? at least one concrete example per major section? CTAs present? word count in band? banned phrases absent? |
 | `launch-post-shape` *(after first launch)* | Captures the launch-post structure that worked. Author *after* you've shipped one launch you're happy with — don't author it from theory. |
 
-**Skills bundled with Claude Code** (no marketplace import): `simplify`. Built-in self-edit pass to cut filler — good fit for "make this paragraph tighter".
+**Skills bundled with Claude Code** (no marketplace import): `simplify`. Built-in self-edit pass to cut filler.
 
-## MCP servers (`agent.mcp_config`)
+## Tools & API access
 
-All write-capable MCPs are scoped **draft-only**: Notion writes only to a designated Drafts database; Ghost / WordPress / Sanity create draft posts and never publish; GitHub opens PRs and never merges. Enforced both at the system-prompt level and at the MCP-token-permission level.
+All write paths are **draft-only**: Notion writes only to a designated Drafts database; Ghost / WordPress / Sanity create draft posts and never publish; GitHub opens PRs and never merges. Enforced both at the system-prompt level and at the API-token-permission level.
 
-| MCP | Scope | Why |
-|---|---|---|
-| Notion (`@notionhq/notion-mcp-server` or hosted [mcp.notion.com](https://mcp.notion.com/mcp)) | **Write — drafts database only.** Integration token granted access to a single "Content Drafts" database, no other pages. | Workspace's draft landing place when not in-repo. Hosted server is the maintained path. |
-| Google Drive (workspace OAuth) | **Write — single "Content Drafts" folder.** OAuth scope limited to that folder. | Alternative draft store if the team is Drive-native. Pick **one of** Notion or Drive — not both. |
-| GitHub (`@modelcontextprotocol/server-github`) | **Write — branch + PR only, never merge.** PAT with `repo` scope but the agent's prompt + Reviewer agent enforce no-merge. | (a) In-repo MDX content (Velite / Content Collections / Fumadocs) ships as a PR. (b) README + CHANGELOG live in repos. (c) Read commits + diffs to write technically accurate launch posts. |
-| Ghost (`MFYDev/ghost-mcp`, if blog is Ghost) | **Draft create only.** Admin API key restricted to draft-post creation; never `published` status. | External CMS draft path. |
-| WordPress (`WordPress/mcp-adapter`, official Feb 2026, if blog is WP) | **Draft create only.** Application Password scoped to `edit_posts` but agent never calls publish endpoints. | External CMS draft path. |
-| Sanity (official Sanity MCP, if blog is Sanity) | **Draft create only — `drafts.*` documents, never publish action.** | Schema-aware so generated drafts respect content model. |
-| Web search — Exa / Brave | **Read-only.** | Source articles, primary references for citations. |
-| Firecrawl — `firecrawl-mcp` | **Read-only.** API key only. | Full-page scrape of source articles, competitor landing pages, primary research. |
+| Service | How the agent uses it | Required env vars | Scope |
+|---|---|---|---|
+| **GitHub** | `gh` CLI for branches and PRs containing in-repo MDX content (`gh pr create`), README + CHANGELOG updates. **Never** `gh pr merge`. Reading commits/diffs to write technically accurate launch posts. | `GH_TOKEN=$GITHUB_PAT_CONTENT_WRITER` (`contents:write`, `pull_requests:write` no-merge, `issues:read`) | No merge. Branch protection on `main` + Reviewer agent gate. |
+| **Notion** | Notion REST API: `curl https://api.notion.com/v1/pages` with `Notion-Version: 2022-06-28` to create draft pages under the workspace's "Content Drafts" database. | `NOTION_TOKEN=secret_…` (integration token granted access to one database only) | Scoped write — drafts database only. |
+| **Google Drive** *(alt to Notion)* | Drive REST API: `curl https://www.googleapis.com/drive/v3/files` to create files in the workspace's "Content Drafts" folder. OAuth-completed at agent setup. | `GDRIVE_REFRESH_TOKEN` (scope: `drive.file` on the drafts folder only) | Scoped write. Pick **one of** Notion or Drive — not both. |
+| **Ghost** *(if blog is Ghost)* | Ghost Admin API: `curl https://<site>.ghost.io/ghost/api/admin/posts/` with `Authorization: Ghost <jwt>` to create `status: 'draft'` posts only. | `GHOST_ADMIN_API_KEY` (Admin API key restricted to Author role; Author role cannot publish — only Editor+ can) | Draft create only. |
+| **WordPress** *(if blog is WP)* | WP REST API: `curl https://<site>/wp-json/wp/v2/posts` with `Authorization: Basic <user:app-password>`, body `{"status":"draft"}`. | `WP_USER` · `WP_APP_PASSWORD` (Application Password scoped to a user with `edit_posts` capability only — no `publish_posts`) | Draft create only. |
+| **Sanity** *(if blog is Sanity)* | Sanity HTTP API: `curl https://<project>.api.sanity.io/v2024-01-01/data/mutate/<dataset>` with `Authorization: Bearer <token>` and `_id: "drafts.<id>"` documents only. | `SANITY_TOKEN` (Editor role; mutations to `drafts.*` IDs only — never publish action) | Draft create only — `drafts.*` documents. |
+| **Web search — Exa** | `curl https://api.exa.ai/search` for source articles, primary references for citations. | `EXA_API_KEY` | Read-only. |
+| **Firecrawl** | `curl https://api.firecrawl.dev/v1/scrape` for full-page scrape of source articles, competitor landing pages, primary research. | `FIRECRAWL_API_KEY` (`fc-…`) | Read-only. |
+| **Library docs** | Claude Code's WebFetch tool against the relevant docs site for technical-content fact-checking. | none | n/a |
 
-**Recommendation for the user's stack** (Vercel + Supabase + Next.js): default to **in-repo MDX** with Velite or Content Collections (Contentlayer is deprecated as of 2024). Blog files live in the same Next.js app, deploy on Vercel preview/prod with the rest of the codebase. MCP set: **GitHub (PR/branch, no-merge) + Notion (drafts) + Firecrawl + web search**. Skip Ghost / WordPress / Sanity unless the blog migrates externally.
+**Recommendation for the user's stack** (Vercel + Supabase + Next.js): default to **in-repo MDX** with Velite or Content Collections (Contentlayer is deprecated as of 2024). Blog files live in the same Next.js app, deploy on Vercel preview/prod with the rest of the codebase. Tool set: **`gh` (PR/branch, no-merge) + Notion REST (drafts) + Firecrawl + Exa**. Skip Ghost / WordPress / Sanity unless the blog migrates externally.
 
-### How to wire this in Multica
+### Wiring in Multica
 
-The cleaned, spec-valid config lives at `agents/content-writer/mcp.json`. Multica's agent-settings GUI does not expose an MCP page today — [PR #1221](https://github.com/multica-ai/multica/pull/1221) is open. The daemon reads `agent.mcp_config` from the DB and passes it to Claude Code via `--mcp-config <tempfile>` (PR #1168, shipped v0.2.6). Full procedure in `agents/MCP-WIRING.md` Part A.
+In the Multica GUI (Settings → Agents → Content Writer), set:
 
-In the Multica GUI (Settings → Agents → Content Writer):
 - **Custom arguments**: leave empty.
-- **Environment** (one `KEY=VALUE` per line — referenced as `${VAR}` in `mcp.json`):
+- **Environment** (one `KEY=VALUE` per line):
   ```
-  GITHUB_PAT_CONTENT_WRITER=ghp_...
-  NOTION_DRAFTS_TOKEN=secret_...
+  GH_TOKEN=ghp_...
+  NOTION_TOKEN=secret_...
   FIRECRAWL_API_KEY=fc-...
   EXA_API_KEY=...
   ```
 
+The agent invokes `gh`, `curl` from Bash. No MCP server config to maintain.
+
 Rationale notes:
-- **github**: PAT scoped to `contents:write`, `pull_requests:write` (no merge), `issues:read`. Branch protection on `main` blocks merges from this PAT. Defense in depth via the Reviewer agent's gating.
+- **github**: PAT scoped to `contents:write`, `pull_requests:write` (no merge), `issues:read`. Branch protection on `main` blocks merges; Reviewer agent's gating is defense in depth.
 - **notion**: integration token granted access to a single "Content Drafts" database. The agent literally cannot write anywhere else in the workspace.
 - **firecrawl** and **exa** are read-only by API design.
 
 ## Coherence check
 
-The brand-voice skill is what the agent *sounds like*; the draft-only MCPs are what the agent *can do*; the anti-publish system prompt is what the agent *won't try to do even if asked*. Together they produce shippable copy that lands in a human-reviewable state every time — distinctive enough to avoid AI-slop, scoped tightly enough that a misfire cannot publish to production. Skills bias output quality up; MCP scopes cap blast radius down; the system prompt closes the gap between them.
+The brand-voice skill is what the agent *sounds like*; the draft-only API surfaces are what the agent *can do*; the anti-publish system prompt is what the agent *won't try to do even if asked*. Together they produce shippable copy that lands in a human-reviewable state every time — distinctive enough to avoid AI-slop, scoped tightly enough that a misfire cannot publish to production.

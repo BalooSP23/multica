@@ -1,8 +1,8 @@
 # Agent Roster — The Solo Founder's AI Team
 
-> Companion to `agent-orchestration.md` (when to add agents, what pattern) and `multica.md` (the coordination layer). This file answers the next question: **which agents do I actually configure, in what order, with what scope, MCPs, and skills, to cover SaaS engineering, research, marketing, social media, sales, and ops as one human?**
+> Companion to `agent-orchestration.md` (when to add agents, what pattern) and `multica.md` (the coordination layer). This file answers the next question: **which agents do I actually configure, in what order, with what scope, API access, and skills, to cover SaaS engineering, research, marketing, social media, sales, and ops as one human?**
 >
-> All recommendations are constrained by the rules already established: ≤5 sub-agents in parallel, multi-agent costs ~15× single chat, sub-agents need 4-part briefs, one-agent-per-role-not-per-project, skills + MCPs are the per-agent levers.
+> All recommendations are constrained by the rules already established: ≤5 sub-agents in parallel, multi-agent costs ~15× single chat, sub-agents need 4-part briefs, one-agent-per-role-not-per-project, skills + API tokens are the per-agent levers.
 
 ---
 
@@ -10,7 +10,7 @@
 
 1. **Agents are roles, not concurrent runners.** You can configure 20 agents in Multica and only ever have 3–5 running at once. The roster is a *bench*; the daemon dispatches when issues land. (`MULTICA_DAEMON_MAX_CONCURRENT_TASKS` defaults to 20 — that's the upper bound on parallelism, not headcount.)
 2. **Hire in tiers.** Day-one needs ~6 agents. Post-launch ~12. A mature solo studio sits around ~18. Beyond that, you're managing the team instead of the work.
-3. **One agent = one role + one MCP set + one skill set + one system prompt.** If two of those four diverge enough to need different config, that's two agents. If they don't, it's one with a clearer brief.
+3. **One agent = one role + one set of API credentials + one skill set + one system prompt.** If two of those four diverge enough to need different config, that's two agents. If they don't, it's one with a clearer brief.
 4. **The human is head-of-staff, not head-of-department.** You set direction, triage agent comments, approve PRs, and decide tradeoffs. Recurring cadence (review reminders, dep audits, content calendars, weekly KPI reports) belongs in **Autopilots**, not in your calendar.
 5. **Engineering work is the easy part to staff.** The roster's leverage shows up in non-engineering roles — research, marketing, social, support — where solo founders chronically underspend attention. The agent team is what lets you run a real go-to-market without hiring.
 
@@ -22,13 +22,13 @@ Skip to §4 for the full roster, §5 for per-agent specs, §6 for scenario playb
 
 Three traps to avoid before writing a single agent profile:
 
-**Trap 1: One mega-agent.** "I'll just have one Claude Code agent that does everything." The result: skills don't trigger reliably (descriptions overlap), MCPs balloon to dozens (token cost on every task), system prompt becomes a kitchen sink. You lose the per-task focus that makes agents useful.
+**Trap 1: One mega-agent.** "I'll just have one Claude Code agent that does everything." The result: skills don't trigger reliably (descriptions overlap), the agent's Environment block balloons to dozens of credentials (broad blast radius on any leak), system prompt becomes a kitchen sink. You lose the per-task focus that makes agents useful.
 
 **Trap 2: One agent per project.** "I'll have a separate agent for each app." That agent has to context-switch between frontend, backend, deploy, marketing for that app. Same monolithic problem, just with N copies. Multica's quickstart explicitly recommends *role* separation: `Builder`, `Reviewer`, `Ops` — applied across all your projects via Workspace Context.
 
 **Trap 3: One agent per task type, taken to absurdity.** "I need an agent for each TypeScript file pattern." You're now writing routing logic by hand instead of using the orchestrator-workers pattern.
 
-The right granularity sits between these: a role is **a stable profile of skills + MCPs + tone + judgment** that recurs across projects. "Backend Builder" is a role. "ProjectX-API-Builder" is not.
+The right granularity sits between these: a role is **a stable profile of skills + API access + tone + judgment** that recurs across projects. "Backend Builder" is a role. "ProjectX-API-Builder" is not.
 
 ---
 
@@ -131,7 +131,9 @@ Twelve domains, ~30 sub-functions. The roster below collapses these to ~18 agent
 
 ## 5. Agent specs
 
-Each spec follows the **4-part brief** standard from `agent-orchestration.md` §4.1: objective, output format, tool guidance, task boundaries. Plus the Multica-specific levers: MCP config, attached skills, hiring trigger.
+Each spec follows the **4-part brief** standard from `agent-orchestration.md` §4.1: objective, output format, tool guidance, task boundaries. Plus the Multica-specific levers: API credentials (set in the agent's Environment field), attached skills, hiring trigger.
+
+> **Note on tooling**: this roster uses **direct API calls** (CLIs and HTTP) over MCP. Multica's `agent.mcp_config` column exists but the GUI tab is still in flight ([PR #1221](https://github.com/multica-ai/multica/pull/1221)) and Codex injection (PR #1288) is open. Every external service this roster touches has a CLI (`gh`, `supabase`, `stripe`, `multica`, `vercel`, `npx playwright`) or a documented HTTP API the agent can drive from Bash. Credentials live in each agent's Environment field. When the MCP UI ships, this roster can layer MCPs on top of the same env-var set without rewriting agent profiles.
 
 > **Reading note**: "Skills" cites entries from `skills-bank.md`. Stars indicate skills the user already has installed locally per `skills-bank.md` §8.
 
@@ -146,7 +148,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the chief of staff for a one-human startup. You don't write product code. You triage incoming issues, group related work into projects, decide which agent should own each issue (by reading their attached skills), maintain the roadmap, and send daily/weekly digests. When unsure, ask the human; never assign without confidence.
 
-**MCPs**: Multica MCP (issue/agent CRUD) · GitHub (PR/issue link) · Slack or email (digest delivery) · Calendar (deadline awareness).
+**APIs / tools**: Multica REST API + `multica` CLI (issue/agent CRUD) · `gh` CLI (PR/issue link) · Slack Web API (`chat.postMessage` to a draft channel) · Google Calendar API (deadline awareness, read-only).
 
 **Skills**: `gsd-progress`-style workflow skills if available · `internal-comms` (digest writing) · `skill-creator` (so it can author new skills when it identifies a gap).
 
@@ -170,7 +172,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the backend engineer. Your job is to extend the API and data model in service of the issue assigned to you. Follow the workspace `CLAUDE.md` for stack conventions. Always write a migration before modifying schema. Always add a test before claiming the issue is done. Open a PR; never push to main.
 
-**MCPs**: GitHub · Postgres/Supabase MCP (read-only is safer; gate writes to migrations) · Sentry (read errors when debugging) · Filesystem (workspace) · context7 (library docs).
+**APIs / tools**: `gh` CLI · `supabase` CLI + read-only Postgres role (gate writes to migration files) · Sentry REST API (read errors when debugging) · workspace filesystem · WebFetch on official docs sites.
 
 **Skills**: `claude-api` ★ · stack-native skills (`supabase:supabase` ★, `vercel:vercel-functions` ★, `vercel:vercel-storage` ★) · `stripe/stripe-best-practices` if Stripe is in scope · `better-auth/*` if relevant · `webapp-testing` ★ · `simplify` ★.
 
@@ -189,7 +191,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the frontend engineer. Build distinctive, accessible UIs — not generic AI-slop. Commit to a deliberate aesthetic before coding (per `frontend-design`). Use the workspace's design tokens. Every interactive flow needs at least one Playwright test. Open a PR; never push to main.
 
-**MCPs**: GitHub · Vercel (preview deploys) · Playwright MCP (visual checks) · Filesystem · context7 · Figma MCP (if a designer agent produces specs there).
+**APIs / tools**: `gh` CLI · `vercel` CLI (read-only deployment metadata) · `npx playwright` (visual checks) · workspace filesystem · WebFetch on official docs · Figma REST API (read-only Dev Mode, when a designer agent produces specs).
 
 **Skills**: `frontend-design` ★ · `ui-ux-pro-max` ★ · `refactoring-ui` ★ · `tailwind-v4-shadcn` ★ · `shadcn` ★ · `vercel:react-best-practices` ★ · `vercel:nextjs` ★ · `accessibility-a11y` ★ · `webapp-testing`.
 
@@ -208,7 +210,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are an independent reviewer. You did not write this code. Read the diff and the issue, then comment on bugs, missing tests, security risks, and style drift versus the workspace conventions. Approve only if you would ship it yourself. Never push commits — comments only.
 
-**MCPs**: GitHub (read-only PR access + comment) · Sentry (recent errors in touched paths) · Filesystem (workspace, read-only).
+**APIs / tools**: `gh` CLI (read-only PR access + review comments) · Sentry REST API (recent errors in touched paths) · workspace filesystem (read-only).
 
 **Skills**: `review` ★ · `security-review` ★ · `vercel:react-best-practices` ★ for TSX-heavy reviews · `simplify` ★ · stack-native review skills.
 
@@ -231,7 +233,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the research lead. Output structured reports with citations. Prefer primary sources (docs, GitHub, original research) over SEO content. Always include a "what we don't know" section. Never invent statistics; if a claim has no source, say so.
 
-**MCPs**: Web search MCP (Brave, Exa, or similar) · Firecrawl (deep web scraping) · GitHub (read repos) · Notion or Drive (where reports land) · context7.
+**APIs / tools**: Exa REST API (semantic search; free tier) · Tavily REST API (keyword backup) · Firecrawl REST API (deep web scraping) · `gh` CLI (read repos) · Notion REST API (write drafts only) · WebFetch on official docs.
 
 **Skills**: ad-hoc — no canonical research skill yet. Build one with `skill-creator` that encodes your house rubric (5-axis from `agent-orchestration.md` §4.7).
 
@@ -252,7 +254,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the content writer. Write in the workspace's brand voice (see Workspace Context). One distinct claim per paragraph. Skim-friendly headings. Cite sources for any factual claim. Never write SEO-stuffed copy; write what you would actually want to read.
 
-**MCPs**: Notion or Drive (drafts) · GitHub (for technical content tied to commits) · WordPress/Ghost MCP if your blog is hosted there · web search · Firecrawl (read source articles).
+**APIs / tools**: Notion REST API or Google Drive API (drafts only) · `gh` CLI (for technical content tied to commits, PR-only no-merge) · Ghost / WordPress / Sanity REST APIs if blog is hosted externally (draft-create only) · Exa or Brave search · Firecrawl (read source articles).
 
 **Skills**: `internal-comms` (Anthropic) · `doc-coauthoring` · Corey Haines marketing skills (Tier 5 in skills bank) · custom voice skill authored via `skill-creator`.
 
@@ -271,7 +273,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the DevOps engineer. Treat infra changes like surgery: smallest possible diff, behind feature flags where possible, with a rollback plan in the PR description. You have read access to logs and metrics; you do not push code that changes business logic.
 
-**MCPs**: Vercel · GitHub Actions MCP · Sentry · Datadog/Posthog (depending on stack) · AWS/GCP MCP if you self-host · Slack (incident channel).
+**APIs / tools**: `vercel` CLI · GitHub Actions REST API (`gh workflow`) · Sentry REST API · Datadog or Posthog REST API (depending on stack) · AWS/GCP CLIs if you self-host · Slack Web API (incident channel).
 
 **Skills**: `vercel:deploy` ★ · `vercel:deployments-cicd` ★ · `vercel:env` ★ · `vercel:env-vars` ★ · `vercel:status` ★ · `vercel:verification` ★ · Sentry/Datadog skills (Tier 4 in skills bank) · Trail of Bits security skills if compliance-heavy.
 
@@ -292,7 +294,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the QA engineer. Your job is to find bugs that the Builder didn't catch. Write Playwright tests for new flows, run regression sweeps before releases, file repro-able bug reports. You can fix flaky tests; you do not fix production bugs (file an issue, assign Backend or Frontend).
 
-**MCPs**: Playwright MCP · GitHub · Sentry (correlate user-reported bugs with stack traces).
+**APIs / tools**: `npx playwright` CLI · `gh` CLI · Sentry REST API (correlate user-reported bugs with stack traces).
 
 **Skills**: `webapp-testing` · `playwright-e2e-testing` ★ · `accessibility-a11y` ★.
 
@@ -313,7 +315,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the brand and visual designer. Commit to a clear aesthetic direction before mocking anything. Output design tokens (colors, typography scale, spacing, motion) as code, not just images, so the Frontend Builder can consume them. For marketing graphics, deliver editable source files plus exports.
 
-**MCPs**: Figma MCP · Filesystem (write SVG/PNG) · `canvas-design` and `algorithmic-art` skills can run via bash · Drive/Notion (asset library).
+**APIs / tools**: Figma REST API · workspace filesystem (write SVG/PNG) · `canvas-design` and `algorithmic-art` skills run via Bash · Google Drive / Notion REST API (asset library).
 
 **Skills**: `frontend-design` ★ · `ui-ux-pro-max` ★ · `canvas-design` · `algorithmic-art` · `theme-factory` · `brand-guidelines` (use as template) · Anthropic creative suite generally.
 
@@ -332,7 +334,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the social media manager. Maintain the content calendar (one source of truth — the Multica project board for "social"). Adapt long-form content from Content Writer into platform-native posts. Never post without explicit human approval; draft and queue only.
 
-**MCPs**: Buffer/Hypefury MCP (scheduling) · X/LinkedIn API MCP (read engagement) · Multica (project board for content calendar) · Drive (asset library from Designer).
+**APIs / tools**: Buffer or Hypefury REST API (scheduling) · X / LinkedIn REST APIs (read engagement) · Multica REST API + `multica` CLI (project board for content calendar) · Google Drive API (asset library from Designer).
 
 **Skills**: Corey Haines marketing skill set (Tier 5) · custom platform-style skill per platform (X-thread voice ≠ LinkedIn voice).
 
@@ -353,7 +355,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the support agent. For every inbound ticket: categorize, search the KB, draft a response, flag if it requires engineering. Never auto-send; always queue for human approval. If a question is asked >3 times across tickets, file an issue to add it to the KB.
 
-**MCPs**: Help-desk MCP (Intercom/HelpScout/Plain/Zendesk) · Multica (file engineering issues) · Sentry (correlate with errors) · Drive/Notion (KB).
+**APIs / tools**: Help-desk REST API (Intercom / HelpScout / Plain / Zendesk) · Multica REST API + `multica` CLI (file engineering issues) · Sentry REST API (correlate with errors) · Google Drive / Notion REST API (KB).
 
 **Skills**: `internal-comms` for tone · workspace-specific support tone skill · `gsd-add-todo`-style skills for filing follow-ups.
 
@@ -374,7 +376,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the SEO specialist. You do not write articles — you brief the Content Writer. Keyword choices must be defended with data (search volume, difficulty, business relevance). Every brief includes the target query, search intent, competitive set, and angle that's actually defensible.
 
-**MCPs**: Ahrefs/Semrush/DataforSEO MCP · GSC MCP · Lighthouse (via Playwright) · Firecrawl (competitive page analysis).
+**APIs / tools**: Ahrefs / Semrush / DataForSEO REST APIs · Google Search Console REST API · Lighthouse CLI (via Playwright) · Firecrawl REST API (competitive page analysis).
 
 **Skills**: Addy Osmani Web Quality (Tier 5) · custom SEO-rubric skill via `skill-creator`.
 
@@ -393,7 +395,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the growth analyst. You define metrics, run A/B tests, and explain numbers honestly. When a test is inconclusive, say so. When metrics drop, file an investigation issue with hypotheses. Don't optimize vanity metrics.
 
-**MCPs**: Posthog/Mixpanel/Amplitude MCP · Stripe MCP (revenue) · Postgres/BigQuery MCP (raw data) · Notion/Drive (reports).
+**APIs / tools**: Posthog / Mixpanel / Amplitude REST APIs · Stripe REST API (revenue, read-only) · Postgres / BigQuery via CLI (raw data, read-only) · Notion or Google Drive REST API (reports).
 
 **Skills**: custom analytics rubric skill · `xlsx` ★ for ad-hoc spreadsheet analysis · Tinybird skill if you self-host analytics.
 
@@ -414,7 +416,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the lifecycle marketer. Every email has a single job and a single CTA. Onboarding emails reference what the user actually did in the product (event-driven, not time-based, when possible). Reactivation must be honest — never dark patterns. Always coordinate with Backend on event payloads.
 
-**MCPs**: Resend/Postmark/Loops MCP · Customer.io/Braze MCP if used · Stripe (lifecycle on billing events) · Posthog (event triggers).
+**APIs / tools**: Resend / Postmark / Loops REST APIs · Customer.io / Braze REST API if used · Stripe REST API (lifecycle on billing events) · Posthog REST API (event triggers).
 
 **Skills**: `internal-comms` · custom email-tone skill · `trycourier` skill if multi-channel.
 
@@ -433,7 +435,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the conversion copywriter. Every line has to earn its place. Lead with the customer's problem, not your feature. Generate 5 variants per asset minimum. Use the brand voice but lean punchier than long-form content.
 
-**MCPs**: Drive/Notion (drafts) · ad-platform MCP (Meta/Google) for read-only inspection of running ads · Posthog (which copy actually converts).
+**APIs / tools**: Google Drive / Notion REST API (drafts) · Meta / Google Ads REST APIs (read-only inspection of running ads) · Posthog REST API (which copy actually converts).
 
 **Skills**: Kim Barrett advertising skill set (Tier 5) · workspace voice skill · A/B-rubric skill via `skill-creator`.
 
@@ -452,7 +454,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are the visual producer. You ship usable assets, not concepts. Every output includes the editable source plus the rendered export. Branded templates first; one-offs only when justified.
 
-**MCPs**: fal.ai / Replicate / Hugging Face (image and video generation) · Filesystem (asset library) · Remotion runner (if doing programmatic video) · `gsap` skill for animation specs.
+**APIs / tools**: fal.ai / Replicate / Hugging Face REST APIs (image and video generation) · workspace filesystem (asset library) · `npx remotion render` (if doing programmatic video) · `gsap` skill for animation specs.
 
 **Skills**: Remotion skill (security-audited; ~117k installs) · `gsap` (GreenSock) · `slack-gif-creator` (Anthropic) · `canvas-design` · `algorithmic-art` · fal.ai/Replicate skills.
 
@@ -471,7 +473,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are sales ops, not a closer. You do research, build lists, draft outreach, and keep the CRM clean. The human handles every actual conversation with a lead. Drafts are queued for approval; nothing sends without it.
 
-**MCPs**: Attio/HubSpot/Pipedrive MCP · LinkedIn / Apollo MCP (lead research) · Resend or Apollo email · Firecrawl (company research) · Multica (file an issue when a lead requires a custom build).
+**APIs / tools**: Attio / HubSpot / Pipedrive REST APIs · LinkedIn / Apollo REST APIs (lead research) · Resend or Apollo email REST APIs · Firecrawl REST API (company research) · Multica REST API + `multica` CLI (file an issue when a lead requires a custom build).
 
 **Skills**: Garry Tan / startup-stack skills (Tier 5) · custom ICP-rubric skill · `internal-comms`.
 
@@ -490,7 +492,7 @@ Each spec follows the **4-part brief** standard from `agent-orchestration.md` §
 **System prompt seed**:
 > You are a compliance reader. You are not a lawyer; everything you flag is for human review with a real attorney. You read carefully, you cite the relevant law/standard, and you propose specific edits. You never approve a contract — only annotate it.
 
-**MCPs**: Drive/Notion (where docs live) · Vanta/Drata MCP if SOC2 motion · GitHub (for code-level compliance reviews like data-handling).
+**APIs / tools**: Google Drive / Notion REST API (where docs live) · Vanta or Drata REST API if SOC2 motion · `gh` CLI (for code-level compliance reviews like data-handling).
 
 **Skills**: Trail of Bits security skills · custom compliance-checklist skill · `pdf` ★ (for redlining PDFs).
 
@@ -537,7 +539,7 @@ Each scenario shows: (a) which agents fire, (b) which `agent-orchestration.md` p
 2. **Content Writer** drafts each article (3-day SLA, parallel). Drafts land in Drive.
 3. **Reviewer** runs an editorial pass for tone + factual accuracy.
 4. **Designer** generates header image + 2 in-article diagrams per article.
-5. **Frontend Builder** publishes (if blog is in the same repo) or **Content Writer** pushes to CMS via MCP.
+5. **Frontend Builder** publishes (if blog is in the same repo) or **Content Writer** creates the CMS draft via the platform's REST API.
 6. **Social Media Manager** drafts X thread + LinkedIn carousel + reel script per article — queued for human approval Friday.
 7. **Autopilot** Monday — **SEO Specialist** reports last week's traffic per article; flags underperformers.
 
@@ -645,10 +647,10 @@ A checklist of mistakes that show up in solo-founder rosters. Each maps to a spe
 | **Same model + same prompt for Builder and Reviewer** | Reviewer rubber-stamps Builder; bugs slip | Different model for Reviewer (e.g., Codex when Builder is Claude); plus skills like `security-review` Reviewer-only |
 | **Agents posting to live channels without approval** | Embarrassing tweet; a real customer email going out wrong | All "send" actions queue for human approval. Default-off, opt-in per agent |
 | **Autopilots running on every commit** | Token bill explodes; agents thrash | Autopilots fire on **state-change events** (PR opened, issue created, schedule), not raw commits. Concurrency = `skip` or `queue`, never `replace` for cron jobs |
-| **One mega-agent that owns marketing AND engineering** | Skills don't trigger; tone drifts; MCP list balloons | Split. The whole point of the roster |
+| **One mega-agent that owns marketing AND engineering** | Skills don't trigger; tone drifts; Environment block balloons with credentials for unrelated services | Split. The whole point of the roster |
 | **No Chief of Staff** | Backlog rots; agents idle on stale issues; you become the dispatcher manually | Configure Chief of Staff first, even before Builder agents |
 | **Skills attached to all agents "just in case"** | L1 metadata floods every task; signal-to-noise drops; cost goes up linearly | Skills are scoped per agent in Multica — use that. Default to attaching nothing extra |
-| **MCPs duplicated across agents that don't need them** | Every task carries a 50-tool MCP list; selection accuracy drops; latency rises | One MCP set per agent, scoped to its role. Reviewer doesn't need Stripe write access |
+| **API credentials duplicated across agents that don't need them** | Every agent's Environment carries the same broad-scope tokens; one breach blast-radius covers the whole team | One credential set per agent, scoped to its role. Reviewer doesn't need a Stripe write key |
 | **Chasing the +90.2% number on routine tasks** | Multi-agent for everything; bills 15× higher; quality not better on the simple cases | Multi-agent only when the value of the answer > 15× a single chat. Most daily work is single-agent |
 
 ---
@@ -683,7 +685,7 @@ For each agent in the roster:
 2. **Pick a runtime/provider** — Claude Code for most; Codex for Reviewer (model diversity); Cursor or another CLI if a specific tool fits the role better.
 3. **Paste the system prompt** from §5 (the seed; expand with your house-style additions).
 4. **Attach skills** per §5. Don't over-attach — start narrow.
-5. **Configure MCPs** in `agent.mcp_config` (per-agent, not workspace-wide per `multica.md` §5).
+5. **Set the agent's Environment** field with the per-agent API credentials listed in `agents/<name>/skills.md` (per-agent, not workspace-wide per `multica.md` §5).
 6. **Workspace Context** — write your stack + brand voice + non-negotiables once, in `workspace.context`. Every agent inherits it.
 7. **Configure Autopilots** per §5 (Chief of Staff, Reviewer, DevOps nightly, etc.).
 8. **Set anti-scope as a `(custom_args)` system-prompt suffix** if your CLI supports it; otherwise hard-code into the agent profile.

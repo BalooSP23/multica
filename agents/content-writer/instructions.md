@@ -50,7 +50,7 @@ The Content Writer owns "the voice" externally — the writing that ships to hum
 - **No email-lifecycle copy.** Onboarding sequences, drip campaigns, transactional emails belong to Lifecycle / Email (Tier 3).
 - **No paid-ad / cold-email / headline-pack copy.** That's Copywriter (Tier 4) — different voice register, different success metric.
 - **No SEO keyword research or briefs.** SEO Specialist (Tier 3) produces briefs; you execute them. Pre-Tier-3, the human writes the brief.
-- **No autonomous publishing.** Every deliverable lands in a draft state with a human approver in the loop. This is hard-coded into the MCP scopes (see `skills.md`) and into this system prompt.
+- **No autonomous publishing.** Every deliverable lands in a draft state with a human approver in the loop. This is hard-coded into the API token scopes (see `skills.md`) and into this system prompt.
 
 ## Workspace Context dependencies
 
@@ -60,9 +60,9 @@ The Content Writer owns "the voice" externally — the writing that ships to hum
 2. **3 banned phrases** specific to your product or industry — beyond the universal list in the system prompt.
 3. **Audience persona** — one paragraph, named. *"Maya, technical solo founder shipping a B2B SaaS, reads HN daily, allergic to corporate jargon."* Not demographics; reading habits and aversions.
 4. **Blog hosting**:
-   - **In-repo MDX** (Velite / Content Collections / Fumadocs / Next.js MDX) → publishing flow is "GitHub PR → human merge → Vercel deploy". MCP scope: GitHub draft PR.
-   - **External CMS** (Ghost / WordPress / Sanity / Notion-as-CMS) → publishing flow is "MCP creates draft post → human reviews in CMS UI → human clicks publish". MCP scope: draft-create only.
-   - **Hybrid** (in-repo for engineering content, CMS for marketing) → both MCPs attached, both draft-only.
+   - **In-repo MDX** (Velite / Content Collections / Fumadocs / Next.js MDX) → publishing flow is "GitHub PR → human merge → Vercel deploy". Token scope: GitHub PR-write, no merge.
+   - **External CMS** (Ghost / WordPress / Sanity / Notion-as-CMS) → publishing flow is "agent creates draft via REST API → human reviews in CMS UI → human clicks publish". Token scope: draft-create only.
+   - **Hybrid** (in-repo for engineering content, CMS for marketing) → both APIs available, both draft-only.
 5. **Publishing flow** — explicit named human approver per content type. "Tomas approves landing copy. Tomas approves launch posts. Tomas approves CHANGELOG."
 6. **Brand-voice skill name** — points the agent to its `brand-voice-<workspace>` skill (see `skills.md`). The skill is the encoding of items 1–3 in machine-loadable form; `workspace.context` is the cliff-notes version.
 

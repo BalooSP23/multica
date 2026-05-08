@@ -1,4 +1,4 @@
-# Skills + MCPs for Frontend Builder
+# Skills + tools for Frontend Builder
 
 ## Skills (Multica → `agent_skill` table)
 
@@ -21,51 +21,53 @@ Every skill below is imported into Multica via `multica skill import --url <skil
 | `turbopack` | Build-time issues during dev. | [skills.sh/vercel/vercel-plugin/turbopack](https://skills.sh/vercel/vercel-plugin/turbopack) | [github.com/vercel/vercel-plugin](https://github.com/vercel/vercel-plugin) |
 | `accessibility-a11y` | WCAG 2.2 AA — keyboard, contrast, ARIA. | [skills.sh/mindrally/skills/accessibility-a11y](https://skills.sh/mindrally/skills/accessibility-a11y) | [github.com/mindrally/skills](https://github.com/mindrally/skills) |
 | `playwright-best-practices` | Cross-browser e2e, auto-wait, test runner. | [skills.sh/currents-dev/playwright-best-practices-skill/playwright-best-practices](https://skills.sh/currents-dev/playwright-best-practices-skill/playwright-best-practices) | [github.com/currents-dev/playwright-best-practices-skill](https://github.com/currents-dev/playwright-best-practices-skill) |
-| `webapp-testing` | Anthropic-flavored "spin up dev server, run Playwright, screenshot, report" loop — fires on *new* UI work where dev server isn't running yet. Overlaps `playwright-best-practices` ~30%; trigger verbs differ ("test this UI" vs. "write a Playwright spec"). | [skills.sh/anthropics/skills/webapp-testing](https://skills.sh/anthropics/skills/webapp-testing) | [github.com/anthropics/skills/tree/main/webapp-testing](https://github.com/anthropics/skills/tree/main/webapp-testing) |
+| `webapp-testing` | Anthropic-flavored "spin up dev server, run Playwright, screenshot, report" loop — fires on *new* UI work. Overlaps `playwright-best-practices` ~30%; trigger verbs differ. | [skills.sh/anthropics/skills/webapp-testing](https://skills.sh/anthropics/skills/webapp-testing) | [github.com/anthropics/skills/tree/main/webapp-testing](https://github.com/anthropics/skills/tree/main/webapp-testing) |
 | `web-artifacts-builder` | Quick prototypes / spike artifacts before committing to a real route. Optional but cheap (small L1). | [skills.sh/anthropics/skills/web-artifacts-builder](https://skills.sh/anthropics/skills/web-artifacts-builder) | [github.com/anthropics/skills/tree/main/web-artifacts-builder](https://github.com/anthropics/skills/tree/main/web-artifacts-builder) |
 
-**Skills bundled with Claude Code** (no marketplace import; auto-load when runtime is `claude-code`): `simplify`, `review`. Run on every PR.
+**Skills bundled with Claude Code** (auto-load when runtime is `claude-code`): `simplify`, `review`. Run on every PR.
 
-**Skills explicitly NOT attached** (anti-scope hygiene): no `claude-api`, `supabase:*`, `stripe/*`, `vercel-functions`, `vercel-storage`, `vercel:auth`, `env-vars`, `vercel:deploy*`, `vercel:status`, `security-review` — those belong to Backend Builder / DevOps / Reviewer. Attaching them here floods L1 metadata and erodes trigger accuracy (anti-pattern §7 in `agent-roster.md`). The user's locally-authored `ui-ux-expert` skill is also not attached — it's a private/laptop-only skill; if you want it on Multica, publish it via `skill-creator` first.
+**Skills explicitly NOT attached** (anti-scope hygiene): no `claude-api`, `supabase:*`, `stripe/*`, `vercel-functions`, `vercel-storage`, `vercel:auth`, `env-vars`, `vercel:deploy*`, `vercel:status`, `security-review` — those belong to Backend Builder / DevOps / Reviewer. Attaching them here floods L1 metadata and erodes trigger accuracy.
 
-## MCP servers (`agent.mcp_config`)
+## Tools & API access
 
-| MCP | Scope | Why |
-|---|---|---|
-| `github` | **PR + issue comment only** — no merge, no force-push, no branch delete. | Open PRs, push branches, comment on issues. Merge stays human. |
-| `playwright` | local headless Chromium | Run e2e specs, take screenshots for visual regression diffs, capture a11y trees. |
-| `shadcn` | read shadcn registries, run `shadcn add <component>` against the workspace | Install components by name from the issue ("add a login form"); supports private/custom registries via `components.json`. |
-| `vercel` | read deployments, fetch preview URL, read build/runtime logs (no project mutation) | Pin preview URL on PR, debug failed previews. |
-| `context7` | read-only docs lookup | Up-to-date Next.js / React / Tailwind v4 / shadcn docs newer than training cut-off. |
-| `filesystem` | scoped to workspace `work_dir` (Multica per-task) | Read tokens from `app/globals.css`, write components, write specs. |
-| `figma` | read-only — Dev Mode | Consume Figma URLs the Designer agent (Tier 2) drops in issue bodies. **Recommend the official Figma Dev Mode MCP** (`https://mcp.figma.com/mcp`) — supported, has variables/auto-layout/code-connect; the GLips fork is read-context-only and Cursor-tuned. |
+| Service | How the agent uses it | Required env vars | Scope |
+|---|---|---|---|
+| **GitHub** | `gh` CLI for branches, commits, `gh pr create`, `gh issue comment`. Never `gh pr merge`. | `GH_TOKEN=$GITHUB_PAT_FRONTEND_BUILDER` (`contents:write`, `pull_requests:write` no-merge, `issues:read`) | No merge, no force-push. Branch protection on `main` is the last line of defense. |
+| **Playwright** | `npx playwright install` (once per task `work_dir`), `npx playwright test`, `npx playwright codegen` for new specs. Local headless Chromium. | none (uses workspace's `package.json`) | Task-scoped browser. |
+| **shadcn** | `pnpm dlx shadcn@latest add <component>` (or `npx shadcn`) per the workspace's `components.json`. Custom registries: same CLI, registry URL in config. | none (registry URL lives in `components.json`) | Read public + workspace registries; writes only into the task `work_dir`. |
+| **Vercel** | `vercel` CLI for `vercel ls` (list deployments), `vercel logs <url>` (build/runtime), `vercel inspect <url>`. Read-only deployment metadata. | `VERCEL_TOKEN` (read-only token via `vercel tokens create --scope <team>`) | Read-only. |
+| **Library docs** | Claude Code's WebFetch tool against the official Next.js / React / Tailwind / shadcn docs sites. | none | n/a |
+| **Filesystem** | Per-task `work_dir`. Read tokens from `app/globals.css`, write components, write specs. | `MULTICA_TASK_WORKDIR` (set by daemon) | Task-scoped only. |
+| **Figma** | `curl https://api.figma.com/v1/files/<file-key>` with `X-Figma-Token: $FIGMA_PAT` to read file structure + Dev Mode tokens. PAT scoped to one team, read-only. | `FIGMA_PAT` (read-only, single-team) | Read-only Dev Mode equivalent. |
 
-### How to wire this in Multica
+### Wiring in Multica
 
-The cleaned, spec-valid config lives at `agents/frontend-builder/mcp.json`. Multica's agent-settings GUI does not expose an MCP page today — [PR #1221](https://github.com/multica-ai/multica/pull/1221) is open. The daemon reads `agent.mcp_config` from the DB and passes it to Claude Code via `--mcp-config <tempfile>` (PR #1168, shipped v0.2.6). Full procedure in `agents/MCP-WIRING.md` Part A.
+In the Multica GUI (Settings → Agents → Frontend Builder), set:
 
-In the Multica GUI (Settings → Agents → Frontend Builder):
-- **Custom arguments**: leave empty, or use for non-MCP tuning.
-- **Environment** (one `KEY=VALUE` per line — referenced as `${VAR}` in `mcp.json`):
+- **Custom arguments**: leave empty.
+- **Environment** (one `KEY=VALUE` per line):
   ```
-  GITHUB_PAT_FRONTEND_BUILDER=ghp_...
+  GH_TOKEN=ghp_...
+  VERCEL_TOKEN=...
+  FIGMA_PAT=figd_...
   MULTICA_TASK_WORKDIR=/home/<user>/multica_workspaces/<task-id>
   ```
-  `vercel` and `figma` are OAuth-based hosted MCPs (handshake via `/mcp` panel on first connection) — no env var needed. `playwright`, `shadcn`, `context7` need no auth.
 
-Rationale notes (Claude Code's `mcp.json` schema does not accept `tool_filter` — tool restriction is enforced at PAT scope and Reviewer-agent gating instead):
-- **github**: PAT scoped to `contents:write`, `pull_requests:write` (no merge), `issues:read`. Branch protection on `main` blocks merges from this PAT.
-- **vercel**: read-only via OAuth scope at consent time — grant only deployment-read scopes; do not grant project-write or deploy.
-- **figma**: read-only Dev Mode scope.
+The daemon spawns the agent CLI with these env vars; the agent invokes `gh`, `npx`, `vercel`, `pnpm`, `curl` from Bash. No MCP server config to maintain.
+
+Rationale:
+- **GitHub** PAT scoped to `contents:write`, `pull_requests:write` (no merge), `issues:read`. Branch protection on `main` blocks merges from this PAT.
+- **Vercel** token scope is the smallest one that allows reading deployments; never grant project-write or deploy.
+- **Figma** PAT is single-team, read-only.
 
 ### Designer → Frontend handoff (how design tokens / Figma URLs arrive)
 
 Three channels, in order of preference:
 
 1. **Pinned `design/tokens.json` in the repo** (canonical). Designer agent commits a JSON token file at `design/tokens.json`; a generator step writes the `@theme inline` block in `app/globals.css`. This survives the Designer agent not existing yet on day one — Frontend authors the token file itself and the future Designer absorbs the contract.
-2. **Figma URL in the Multica issue body** under a `Design:` line. Frontend's Figma MCP reads the file via Dev Mode; tokens are extracted and reconciled against `design/tokens.json` (mismatches file an issue against Designer).
+2. **Figma URL in the Multica issue body** under a `Design:` line. Frontend reads the file via the Figma REST API; tokens are extracted and reconciled against `design/tokens.json` (mismatches file an issue against Designer).
 3. **Attached file on the Multica issue** (PNG/PDF mock) — fallback when neither of the above is available; Frontend implements visually and notes "no Figma source" in the PR.
 
 ## Coherence check
 
-The skill set covers the full loop: aesthetic decision (`frontend-design`) → composition (`shadcn`, `tailwind-v4-shadcn`, `ui-ux-pro-max`, `refactoring-ui`) → framework correctness (`nextjs`, `react-best-practices`, `next-cache-components`) → a11y (`accessibility-a11y`) → tests (`webapp-testing` for first-time UI, `playwright-best-practices` for spec-authoring) → self-review (`simplify`, `review`). MCP set covers: code I/O (`github`, `filesystem`), component supply chain (`shadcn`), runtime feedback (`playwright`, `vercel`), design-source ingestion (`figma`), and current docs (`context7`). No MCP grants production write access; merge and infra mutation stay outside this agent.
+The skill set covers the full loop: aesthetic decision (`frontend-design`) → composition (`shadcn`, `tailwind-v4-shadcn`, `ui-ux-pro-max`, `refactoring-ui`) → framework correctness (`nextjs`, `react-best-practices`, `next-cache-components`) → a11y (`accessibility-a11y`) → tests (`webapp-testing`, `playwright-best-practices`) → self-review (`simplify`, `review`). The tool set covers: code I/O (`gh`, filesystem), component supply chain (`shadcn` CLI), runtime feedback (`playwright`, `vercel` read-only), design-source ingestion (Figma REST), and current docs (WebFetch). No tool grants production write access; merge and infra mutation stay outside this agent.

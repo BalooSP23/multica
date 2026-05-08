@@ -110,7 +110,7 @@ When an agent is disabled, do not delete its config in Multica — set it inacti
 
 ## 8. Sacred environments (an agent must never touch)
 
-- **Production database**: read-only access via Supabase MCP `--read-only --project-ref=<prod-ref>`; writes blocked at the token level.
+- **Production database**: read-only access via the Supabase REST/Postgres APIs using a **read-only role** scoped to the project; writes blocked at the token level. Schema changes only via migration files in PRs.
 - **Live Stripe**: agents have test-mode keys only. The live key lives in Vercel env, never in `agent.environment`.
 - **Customer support inbox**: `[FILL IN if applicable — e.g. Plain.com — agent has read access only, replies queued for human approval]`
 - **DNS / domain registrar**: never accessed by any agent.
@@ -134,7 +134,7 @@ When an agent is disabled, do not delete its config in Multica — set it inacti
 ## 10. Sources / cross-references
 
 - `agents/<name>/instructions.md` — per-agent role + system prompt; assumes this file is loaded.
-- `agents/<name>/skills.md` — per-agent skill + MCP packaging.
-- `agents/MCP-WIRING.md` — how MCPs actually wire into Multica today (no MCP UI page).
+- `agents/<name>/skills.md` — per-agent skill list + Tools & API access (CLIs, REST endpoints, env vars, scope).
+- `agents/READY-TO-CONFIGURE.md` — index of all 6 Tier-1 agents and the configuration sequence.
 - `research/multica.md` §5, §7 — workspace.context schema + how it's prepended to every agent's prompt.
 - `research/agent-roster.md` §4–§5 — full roster spec.
