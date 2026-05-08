@@ -180,7 +180,7 @@ skill
 
 **Lifecycle**:
 
-1. **Author** — write the skill once, on the Settings → Skills page (UI), via the CLI (`multica skill create`), or import from a URL (`multica skill import --url …`). Sources include `clawhub.io` and `skills.sh`.
+1. **Author** — write the skill once, on the Settings → Skills page (UI), via the CLI (`multica skill create`), or import from a URL (`multica skill import --url …`). Primary marketplace is `skills.sh` (verified live, 581+ vendor-official skills). Multica's older docs also reference `clawhub.ai` as a community marketplace; it exists but is small (~50 skills), so prefer `skills.sh` with GitHub as fallback.
 2. **Mount** — attach the skill to one or more agents on the agent settings page. Many-to-many: one skill ↔ many agents, one agent ↔ many skills (`agent_skill` join table). **Scoping is per-agent only**; there is no team or project scope today.
 3. **Inject** — when the daemon claims a task, before spawning the CLI it writes every attached skill into the **provider-native location** in the task's working directory:
 
@@ -204,7 +204,7 @@ skill
 multica skill list
 multica skill get <id>
 multica skill create --title "…" …
-multica skill import --url https://clawhub.io/…
+multica skill import --url https://skills.sh/<publisher>/<repo>/<skill>
 multica skill files upsert <skill-id> --path …
 ```
 
@@ -368,6 +368,6 @@ A reasonable first set of attached skills (cross-reference `skills-bank.md` for 
   - `docs/product-overview.md` (canonical product spec, in Chinese)
   - `skills-lock.json`
 - Product site: https://multica.ai
-- Skill marketplaces referenced by Multica: https://clawhub.io, https://skills.sh
+- Skill marketplaces referenced by Multica: https://skills.sh (primary, verified live), https://clawhub.ai (community, small)
 - Agent Skills standard (Anthropic): https://platform.claude.com/docs/en/docs/agents-and-tools/agent-skills/overview, https://agentskills.io, https://github.com/anthropics/skills
 - Cross-references: `agent-orchestration.md` (orchestration patterns), `skills-bank.md` (curated skill list)

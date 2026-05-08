@@ -386,7 +386,8 @@ description: What it does AND when Claude should use it. Include trigger phrases
 - **`ComposioHQ/awesome-claude-skills`** — 58k★, broad coverage with 1000+ entries.
 - **`travisvn/awesome-claude-skills`** — 12k★, foundational curated list.
 - **`shadcn/ui` skills/** — official shadcn skill.
-- **ClawHub** (https://clawhub.io) — Multica's referenced public marketplace, with version selection. (Note: cert was expired during research; verify before publishing.)
+- **skills.sh** (https://skills.sh) — primary marketplace; 581+ vendor-official skills. All URLs in this bank are verified live.
+- **clawhub.ai** (https://clawhub.ai) — community marketplace referenced by Multica's docs; small (~50 skills), use as last-resort fallback.
 - **skills.sh** — second public skill marketplace referenced by Multica imports.
 - **officialskills.sh** — VoltAgent's hosted skill index.
 
@@ -421,5 +422,5 @@ For a Multica self-hosted workspace, the threat model is sharper because skills 
 - `travisvn/awesome-claude-skills` (12.2k★) — https://github.com/travisvn/awesome-claude-skills
 - `nextlevelbuilder/ui-ux-pro-max-skill` (74k★) — https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
 - `shadcn/ui` — https://github.com/shadcn/ui
-- ClawHub marketplace — https://clawhub.io · skills.sh · officialskills.sh
+- Skill marketplaces — skills.sh (primary) · officialskills.sh (vendor-official mirror) · clawhub.ai (community)
 - Cross-references: `multica.md` (how Multica injects skills into provider-native paths), `agent-orchestration.md` (which skills support which orchestration patterns)
